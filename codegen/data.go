@@ -65,7 +65,10 @@ func BuildData(cfg *config.Config, plugins []SchemaMutator) (*Data, error) {
 	cfg.InjectBuiltins(b.Schema)
 
 	for _, p := range plugins {
-		p.MutateSchema(b.Schema)
+		err = p.MutateSchema(b.Schema)
+		if err != nil {
+			return nil, fmt.Errorf("error running MutateSchema: %v", err)
+		}
 	}
 
 	b.Binder, err = b.Config.NewBinder(b.Schema)

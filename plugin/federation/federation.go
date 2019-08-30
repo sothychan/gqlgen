@@ -222,8 +222,7 @@ func (f *federation) setEntities(cfg *config.Config) {
 		panic(err)
 	}
 	for _, schemaType := range schema.Types {
-		switch schemaType.Kind {
-		case ast.Object:
+		if schemaType.Kind == ast.Object {
 			dir := schemaType.Directives.ForName("key") // TODO: interfaces
 			if dir != nil {
 				fieldName := dir.Arguments[0].Value.Raw // TODO: multiple arguments,a nd multiple keys

@@ -116,7 +116,7 @@ func (m *Plugin) MutateConfig(cfg *config.Config) error {
 			for _, implementor := range schema.GetImplements(schemaType) {
 				it.Implements = append(it.Implements, implementor.Name)
 			}
-			if ent { // only when Object. Directive validation should have occured on InputObject otherwise.
+			if ent { // only when Object. Directive validation should have occurred on InputObject otherwise.
 				it.Implements = append(it.Implements, "_Entity")
 			}
 
