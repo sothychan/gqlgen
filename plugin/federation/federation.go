@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/99designs/gqlgen/codegen"
 	"github.com/99designs/gqlgen/codegen/config"
-	"github.com/sothychan/gqlgen/codegen"
-	"github.com/sothychan/gqlgen/codegen/templates"
-
+	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/99designs/gqlgen/plugin"
 
 	"github.com/vektah/gqlparser"
