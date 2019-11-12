@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/99designs/gqlgen/internal/code"
 	"github.com/pkg/errors"
+	"github.com/sothychan/gqlgen/internal/code"
 	"github.com/vektah/gqlparser"
 	"github.com/vektah/gqlparser/ast"
 	"golang.org/x/tools/go/packages"
