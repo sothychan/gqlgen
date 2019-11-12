@@ -14,14 +14,11 @@ import (
 func TestModelGeneration(t *testing.T) {
 	cfg, err := config.LoadConfig("testdata/gqlgen.yml")
 	require.NoError(t, err)
-<<<<<<< HEAD
+	require.NoError(t, cfg.Check())
+
 	p := Plugin{
 		MutateHook: mutateHook,
 	}
-=======
-	require.NoError(t, cfg.Check())
-	p := Plugin{}
->>>>>>> 63e6214f6aedef52d888e07e5eb4095e60b0eafa
 	require.NoError(t, p.MutateConfig(cfg))
 
 	require.True(t, cfg.Models.UserDefined("MissingTypeNotNull"))
