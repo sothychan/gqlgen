@@ -37,6 +37,10 @@ type B struct {
 
 func (B) IsTestUnion() {}
 
+type CheckIssue896 struct {
+	ID *int `json:"id"`
+}
+
 type ContentPost struct {
 	Foo *string `json:"foo"`
 }
@@ -85,6 +89,10 @@ type LoopB struct {
 // added to the TypeMap
 type Map struct {
 	ID string `json:"id"`
+}
+
+type NestedMapInput struct {
+	Map map[string]interface{} `json:"map"`
 }
 
 type ObjectDirectives struct {

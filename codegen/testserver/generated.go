@@ -62,6 +62,8 @@ type DirectiveRoot struct {
 
 	Logged func(ctx context.Context, obj interface{}, next graphql.Resolver, id string) (res interface{}, err error)
 
+	MakeNil func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error)
+
 	Range func(ctx context.Context, obj interface{}, next graphql.Resolver, min *int, max *int) (res interface{}, err error)
 
 	ToNull func(ctx context.Context, obj interface{}, next graphql.Resolver) (res interface{}, err error)
@@ -94,6 +96,10 @@ type ComplexityRoot struct {
 		ID func(childComplexity int) int
 	}
 
+	CheckIssue896 struct {
+		ID func(childComplexity int) int
+	}
+
 	Circle struct {
 		Area   func(childComplexity int) int
 		Radius func(childComplexity int) int
@@ -105,6 +111,18 @@ type ComplexityRoot struct {
 
 	ContentUser struct {
 		Foo func(childComplexity int) int
+	}
+
+	EmbeddedCase1 struct {
+		ExportedEmbeddedPointerExportedMethod func(childComplexity int) int
+	}
+
+	EmbeddedCase2 struct {
+		UnexportedEmbeddedPointerExportedMethod func(childComplexity int) int
+	}
+
+	EmbeddedCase3 struct {
+		UnexportedEmbeddedInterfaceExportedMethod func(childComplexity int) int
 	}
 
 	EmbeddedDefaultScalar struct {
@@ -222,16 +240,22 @@ type ComplexityRoot struct {
 		DirectiveObject                  func(childComplexity int) int
 		DirectiveObjectWithCustomGoModel func(childComplexity int) int
 		DirectiveUnimplemented           func(childComplexity int) int
+		EmbeddedCase1                    func(childComplexity int) int
+		EmbeddedCase2                    func(childComplexity int) int
+		EmbeddedCase3                    func(childComplexity int) int
 		ErrorBubble                      func(childComplexity int) int
 		Errors                           func(childComplexity int) int
 		Fallback                         func(childComplexity int, arg FallbackToStringEncoding) int
 		InputSlice                       func(childComplexity int, arg []string) int
 		InvalidIdentifier                func(childComplexity int) int
+		Issue896a                        func(childComplexity int) int
 		MapInput                         func(childComplexity int, input map[string]interface{}) int
+		MapNestedStringInterface         func(childComplexity int, in *NestedMapInput) int
 		MapStringInterface               func(childComplexity int, in map[string]interface{}) int
 		ModelMethods                     func(childComplexity int) int
 		NestedInputs                     func(childComplexity int, input [][]*OuterInput) int
 		NestedOutputs                    func(childComplexity int) int
+		NoShape                          func(childComplexity int) int
 		NullableArg                      func(childComplexity int, arg *int) int
 		OptionalUnion                    func(childComplexity int) int
 		Overlapping                      func(childComplexity int) int
@@ -264,8 +288,13 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		InitPayload func(childComplexity int) int
-		Updated     func(childComplexity int) int
+		DirectiveArg           func(childComplexity int, arg string) int
+		DirectiveDouble        func(childComplexity int) int
+		DirectiveNullableArg   func(childComplexity int, arg *int, arg2 *int, arg3 *string) int
+		DirectiveUnimplemented func(childComplexity int) int
+		InitPayload            func(childComplexity int) int
+		Issue896b              func(childComplexity int) int
+		Updated                func(childComplexity int) int
 	}
 
 	User struct {
@@ -339,7 +368,6 @@ type QueryResolver interface {
 	Recursive(ctx context.Context, input *RecursiveInputSlice) (*bool, error)
 	NestedInputs(ctx context.Context, input [][]*OuterInput) (*bool, error)
 	NestedOutputs(ctx context.Context) ([][]*OuterObject, error)
-	Shapes(ctx context.Context) ([]Shape, error)
 	ModelMethods(ctx context.Context) (*ModelMethods, error)
 	User(ctx context.Context, id int) (*User, error)
 	NullableArg(ctx context.Context, arg *int) (*string, error)
@@ -359,7 +387,14 @@ type QueryResolver interface {
 	DirectiveField(ctx context.Context) (*string, error)
 	DirectiveDouble(ctx context.Context) (*string, error)
 	DirectiveUnimplemented(ctx context.Context) (*string, error)
+	EmbeddedCase1(ctx context.Context) (*EmbeddedCase1, error)
+	EmbeddedCase2(ctx context.Context) (*EmbeddedCase2, error)
+	EmbeddedCase3(ctx context.Context) (*EmbeddedCase3, error)
+	Shapes(ctx context.Context) ([]Shape, error)
+	NoShape(ctx context.Context) (Shape, error)
+	Issue896a(ctx context.Context) ([]*CheckIssue896, error)
 	MapStringInterface(ctx context.Context, in map[string]interface{}) (map[string]interface{}, error)
+	MapNestedStringInterface(ctx context.Context, in *NestedMapInput) (map[string]interface{}, error)
 	ErrorBubble(ctx context.Context) (*Error, error)
 	Errors(ctx context.Context) (*Errors, error)
 	Valid(ctx context.Context) (string, error)
@@ -378,6 +413,11 @@ type QueryResolver interface {
 type SubscriptionResolver interface {
 	Updated(ctx context.Context) (<-chan string, error)
 	InitPayload(ctx context.Context) (<-chan string, error)
+	DirectiveArg(ctx context.Context, arg string) (<-chan *string, error)
+	DirectiveNullableArg(ctx context.Context, arg *int, arg2 *int, arg3 *string) (<-chan *string, error)
+	DirectiveDouble(ctx context.Context) (<-chan *string, error)
+	DirectiveUnimplemented(ctx context.Context) (<-chan *string, error)
+	Issue896b(ctx context.Context) (<-chan []*CheckIssue896, error)
 }
 type UserResolver interface {
 	Friends(ctx context.Context, obj *User) ([]*User, error)
@@ -461,6 +501,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.B.ID(childComplexity), true
 
+	case "CheckIssue896.id":
+		if e.complexity.CheckIssue896.ID == nil {
+			break
+		}
+
+		return e.complexity.CheckIssue896.ID(childComplexity), true
+
 	case "Circle.area":
 		if e.complexity.Circle.Area == nil {
 			break
@@ -488,6 +535,27 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.ContentUser.Foo(childComplexity), true
+
+	case "EmbeddedCase1.exportedEmbeddedPointerExportedMethod":
+		if e.complexity.EmbeddedCase1.ExportedEmbeddedPointerExportedMethod == nil {
+			break
+		}
+
+		return e.complexity.EmbeddedCase1.ExportedEmbeddedPointerExportedMethod(childComplexity), true
+
+	case "EmbeddedCase2.unexportedEmbeddedPointerExportedMethod":
+		if e.complexity.EmbeddedCase2.UnexportedEmbeddedPointerExportedMethod == nil {
+			break
+		}
+
+		return e.complexity.EmbeddedCase2.UnexportedEmbeddedPointerExportedMethod(childComplexity), true
+
+	case "EmbeddedCase3.unexportedEmbeddedInterfaceExportedMethod":
+		if e.complexity.EmbeddedCase3.UnexportedEmbeddedInterfaceExportedMethod == nil {
+			break
+		}
+
+		return e.complexity.EmbeddedCase3.UnexportedEmbeddedInterfaceExportedMethod(childComplexity), true
 
 	case "EmbeddedDefaultScalar.value":
 		if e.complexity.EmbeddedDefaultScalar.Value == nil {
@@ -912,6 +980,27 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.DirectiveUnimplemented(childComplexity), true
 
+	case "Query.embeddedCase1":
+		if e.complexity.Query.EmbeddedCase1 == nil {
+			break
+		}
+
+		return e.complexity.Query.EmbeddedCase1(childComplexity), true
+
+	case "Query.embeddedCase2":
+		if e.complexity.Query.EmbeddedCase2 == nil {
+			break
+		}
+
+		return e.complexity.Query.EmbeddedCase2(childComplexity), true
+
+	case "Query.embeddedCase3":
+		if e.complexity.Query.EmbeddedCase3 == nil {
+			break
+		}
+
+		return e.complexity.Query.EmbeddedCase3(childComplexity), true
+
 	case "Query.errorBubble":
 		if e.complexity.Query.ErrorBubble == nil {
 			break
@@ -957,6 +1046,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.InvalidIdentifier(childComplexity), true
 
+	case "Query.issue896a":
+		if e.complexity.Query.Issue896a == nil {
+			break
+		}
+
+		return e.complexity.Query.Issue896a(childComplexity), true
+
 	case "Query.mapInput":
 		if e.complexity.Query.MapInput == nil {
 			break
@@ -968,6 +1064,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Query.MapInput(childComplexity, args["input"].(map[string]interface{})), true
+
+	case "Query.mapNestedStringInterface":
+		if e.complexity.Query.MapNestedStringInterface == nil {
+			break
+		}
+
+		args, err := ec.field_Query_mapNestedStringInterface_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.MapNestedStringInterface(childComplexity, args["in"].(*NestedMapInput)), true
 
 	case "Query.mapStringInterface":
 		if e.complexity.Query.MapStringInterface == nil {
@@ -1006,6 +1114,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Query.NestedOutputs(childComplexity), true
+
+	case "Query.noShape":
+		if e.complexity.Query.NoShape == nil {
+			break
+		}
+
+		return e.complexity.Query.NoShape(childComplexity), true
 
 	case "Query.nullableArg":
 		if e.complexity.Query.NullableArg == nil {
@@ -1183,12 +1298,57 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Slices.Test4(childComplexity), true
 
+	case "Subscription.directiveArg":
+		if e.complexity.Subscription.DirectiveArg == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_directiveArg_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.DirectiveArg(childComplexity, args["arg"].(string)), true
+
+	case "Subscription.directiveDouble":
+		if e.complexity.Subscription.DirectiveDouble == nil {
+			break
+		}
+
+		return e.complexity.Subscription.DirectiveDouble(childComplexity), true
+
+	case "Subscription.directiveNullableArg":
+		if e.complexity.Subscription.DirectiveNullableArg == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_directiveNullableArg_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.DirectiveNullableArg(childComplexity, args["arg"].(*int), args["arg2"].(*int), args["arg3"].(*string)), true
+
+	case "Subscription.directiveUnimplemented":
+		if e.complexity.Subscription.DirectiveUnimplemented == nil {
+			break
+		}
+
+		return e.complexity.Subscription.DirectiveUnimplemented(childComplexity), true
+
 	case "Subscription.initPayload":
 		if e.complexity.Subscription.InitPayload == nil {
 			break
 		}
 
 		return e.complexity.Subscription.InitPayload(childComplexity), true
+
+	case "Subscription.issue896b":
+		if e.complexity.Subscription.Issue896b == nil {
+			break
+		}
+
+		return e.complexity.Subscription.Issue896b(childComplexity), true
 
 	case "Subscription.updated":
 		if e.complexity.Subscription.Updated == nil {
@@ -1390,9 +1550,9 @@ type Map {
 }
 
 type OverlappingFields {
-  oneFoo: Int!
-  twoFoo: Int!
-  oldFoo: Int!
+  oneFoo: Int! @goField(name: "foo")
+  twoFoo: Int! @goField(name: "foo")
+  oldFoo: Int! @goField(name: "foo", forceResolver: true)
   newFoo: Int!
   new_foo: Int!
 }
@@ -1420,6 +1580,13 @@ extend type Query {
     directiveUnimplemented: String @unimplemented
 }
 
+extend type Subscription {
+    directiveArg(arg: String! @length(min:1, max: 255, message: "invalid length")): String
+    directiveNullableArg(arg: Int @range(min:0), arg2: Int @range, arg3: String @toNull): String
+    directiveDouble: String @directive1 @directive2
+    directiveUnimplemented: String @unimplemented
+}
+
 input InputDirectives {
     text: String! @length(min: 0, max: 7, message: "not valid")
     nullableText: String @toNull
@@ -1441,6 +1608,64 @@ type ObjectDirectivesWithCustomGoModel {
     nullableText: String @toNull
 }
 `},
+	&ast.Source{Name: "embedded.graphql", Input: `extend type Query {
+    embeddedCase1: EmbeddedCase1
+    embeddedCase2: EmbeddedCase2
+    embeddedCase3: EmbeddedCase3
+}
+
+type EmbeddedCase1 @goModel(model:"testserver.EmbeddedCase1") {
+    exportedEmbeddedPointerExportedMethod: String!
+}
+
+type EmbeddedCase2 @goModel(model:"testserver.EmbeddedCase2") {
+    unexportedEmbeddedPointerExportedMethod: String!
+}
+
+type EmbeddedCase3 @goModel(model:"testserver.EmbeddedCase3") {
+    unexportedEmbeddedInterfaceExportedMethod: String!
+}
+`},
+	&ast.Source{Name: "interfaces.graphql", Input: `extend type Query {
+    shapes: [Shape]
+    noShape: Shape @makeNil
+}
+
+interface Shape {
+    area: Float
+}
+type Circle implements Shape {
+    radius: Float
+    area: Float
+}
+type Rectangle implements Shape {
+    length: Float
+    width: Float
+    area: Float
+}
+union ShapeUnion @goModel(model:"testserver.ShapeUnion") = Circle | Rectangle
+
+directive @makeNil on FIELD_DEFINITION
+`},
+	&ast.Source{Name: "issue896.graphql", Input: `# This example should build stable output. If the file content starts
+# alternating nondeterministically between two outputs, then see
+# https://github.com/99designs/gqlgen/issues/896.
+
+extend schema {
+  query: Query
+  subscription: Subscription
+}
+
+type CheckIssue896 {id: Int}
+
+extend type Query {
+  issue896a: [CheckIssue896!] # Note the "!" or lack thereof.
+}
+
+extend type Subscription {
+  issue896b: [CheckIssue896] # Note the "!" or lack thereof.
+}
+`},
 	&ast.Source{Name: "loops.graphql", Input: `type LoopA {
     b: LoopB!
 }
@@ -1451,16 +1676,21 @@ type LoopB {
 `},
 	&ast.Source{Name: "maps.graphql", Input: `extend type Query {
     mapStringInterface(in: MapStringInterfaceInput): MapStringInterfaceType
+    mapNestedStringInterface(in: NestedMapInput): MapStringInterfaceType
 }
 
-type MapStringInterfaceType {
+type MapStringInterfaceType @goModel(model: "map[string]interface{}") {
     a: String
     b: Int
 }
 
-input MapStringInterfaceInput {
+input MapStringInterfaceInput @goModel(model: "map[string]interface{}") {
     a: String
     b: Int
+}
+
+input NestedMapInput {
+    map: MapStringInterfaceInput
 }
 `},
 	&ast.Source{Name: "nulls.graphql", Input: `extend type Query {
@@ -1524,14 +1754,16 @@ type EmbeddedDefaultScalar {
     value: DefaultScalarImplementation
 }
 `},
-	&ast.Source{Name: "schema.graphql", Input: `type Query {
+	&ast.Source{Name: "schema.graphql", Input: `directive @goModel(model: String, models: [String!]) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+directive @goField(forceResolver: Boolean, name: String) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+type Query {
     invalidIdentifier: InvalidIdentifier
     collision: It
     mapInput(input: Changes): Boolean
     recursive(input: RecursiveInputSlice): Boolean
     nestedInputs(input: [[OuterInput]] = [[{inner: {id: 1}}]]): Boolean
     nestedOutputs: [[OuterObject]]
-    shapes: [Shape]
     modelMethods: ModelMethods
     user(id: Int!): User!
     nullableArg(arg: Int = 123): String
@@ -1548,7 +1780,7 @@ type Subscription {
 
 type User {
     id: Int!
-    friends: [User!]!
+    friends: [User!]! @goField(forceResolver: true)
     created: Time!
     updated: Time
 }
@@ -1576,7 +1808,7 @@ type It {
     id: ID!
 }
 
-input Changes {
+input Changes @goModel(model:"map[string]interface{}") {
     a: Int
     b: Int
 }
@@ -1593,7 +1825,7 @@ input OuterInput {
     inner: InnerInput!
 }
 
-scalar ThirdParty
+scalar ThirdParty @goModel(model:"testserver.ThirdParty")
 
 type OuterObject {
     inner: InnerObject!
@@ -1603,25 +1835,11 @@ type InnerObject {
     id: Int!
 }
 
-interface Shape {
-    area: Float
-}
-type Circle implements Shape {
-    radius: Float
-    area: Float
-}
-type Rectangle implements Shape {
-    length: Float
-    width: Float
-    area: Float
-}
-union ShapeUnion = Circle | Rectangle
-
 type ForcedResolver {
-    field: Circle
+    field: Circle @goField(forceResolver: true)
 }
 
-type EmbeddedPointer {
+type EmbeddedPointer @goModel(model:"testserver.EmbeddedPointerModel") {
     ID: String
     Title: String
 }
@@ -1680,7 +1898,7 @@ extend type Query {
 """ These things are all valid, but without care generate invalid go code """
 type ValidType {
     differentCase: String!
-    different_case: String!
+    different_case: String! @goField(name:"DifferentCaseOld")
     validInputKeywords(input: ValidInput): Boolean!
     validArgs(
         break:       String!,
@@ -1738,7 +1956,7 @@ input ValidInput {
     import:      String!
     return:      String!
     var:         String!
-    _:           String!
+    _:           String! @goField(name: "Underscore")
 }
 
 # see https://github.com/99designs/gqlgen/issues/694
@@ -1848,7 +2066,7 @@ func (ec *executionContext) field_Panics_argUnmarshal_args(ctx context.Context, 
 	args := map[string]interface{}{}
 	var arg0 []MarshalPanic
 	if tmp, ok := rawArgs["u"]; ok {
-		arg0, err = ec.unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx, tmp)
+		arg0, err = ec.unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanicᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1862,7 +2080,7 @@ func (ec *executionContext) field_Panics_fieldFuncMarshal_args(ctx context.Conte
 	args := map[string]interface{}{}
 	var arg0 []MarshalPanic
 	if tmp, ok := rawArgs["u"]; ok {
-		arg0, err = ec.unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx, tmp)
+		arg0, err = ec.unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanicᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -2111,7 +2329,7 @@ func (ec *executionContext) field_Query_inputSlice_args(ctx context.Context, raw
 	args := map[string]interface{}{}
 	var arg0 []string
 	if tmp, ok := rawArgs["arg"]; ok {
-		arg0, err = ec.unmarshalNString2ᚕstring(ctx, tmp)
+		arg0, err = ec.unmarshalNString2ᚕstringᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -2131,6 +2349,20 @@ func (ec *executionContext) field_Query_mapInput_args(ctx context.Context, rawAr
 		}
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_mapNestedStringInterface_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 *NestedMapInput
+	if tmp, ok := rawArgs["in"]; ok {
+		arg0, err = ec.unmarshalONestedMapInput2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐNestedMapInput(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["in"] = arg0
 	return args, nil
 }
 
@@ -2201,6 +2433,128 @@ func (ec *executionContext) field_Query_user_args(ctx context.Context, rawArgs m
 		}
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_directiveArg_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["arg"]; ok {
+		directive0 := func(ctx context.Context) (interface{}, error) { return ec.unmarshalNString2string(ctx, tmp) }
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			min, err := ec.unmarshalNInt2int(ctx, 1)
+			if err != nil {
+				return nil, err
+			}
+			max, err := ec.unmarshalOInt2ᚖint(ctx, 255)
+			if err != nil {
+				return nil, err
+			}
+			message, err := ec.unmarshalOString2ᚖstring(ctx, "invalid length")
+			if err != nil {
+				return nil, err
+			}
+			if ec.directives.Length == nil {
+				return nil, errors.New("directive length is not implemented")
+			}
+			return ec.directives.Length(ctx, rawArgs, directive0, min, max, message)
+		}
+
+		tmp, err = directive1(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if data, ok := tmp.(string); ok {
+			arg0 = data
+		} else {
+			return nil, fmt.Errorf(`unexpected type %T from directive, should be string`, tmp)
+		}
+	}
+	args["arg"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_directiveNullableArg_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 *int
+	if tmp, ok := rawArgs["arg"]; ok {
+		directive0 := func(ctx context.Context) (interface{}, error) { return ec.unmarshalOInt2ᚖint(ctx, tmp) }
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			min, err := ec.unmarshalOInt2ᚖint(ctx, 0)
+			if err != nil {
+				return nil, err
+			}
+			if ec.directives.Range == nil {
+				return nil, errors.New("directive range is not implemented")
+			}
+			return ec.directives.Range(ctx, rawArgs, directive0, min, nil)
+		}
+
+		tmp, err = directive1(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if data, ok := tmp.(*int); ok {
+			arg0 = data
+		} else if tmp == nil {
+			arg0 = nil
+		} else {
+			return nil, fmt.Errorf(`unexpected type %T from directive, should be *int`, tmp)
+		}
+	}
+	args["arg"] = arg0
+	var arg1 *int
+	if tmp, ok := rawArgs["arg2"]; ok {
+		directive0 := func(ctx context.Context) (interface{}, error) { return ec.unmarshalOInt2ᚖint(ctx, tmp) }
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			min, err := ec.unmarshalOInt2ᚖint(ctx, 0)
+			if err != nil {
+				return nil, err
+			}
+			if ec.directives.Range == nil {
+				return nil, errors.New("directive range is not implemented")
+			}
+			return ec.directives.Range(ctx, rawArgs, directive0, min, nil)
+		}
+
+		tmp, err = directive1(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if data, ok := tmp.(*int); ok {
+			arg1 = data
+		} else if tmp == nil {
+			arg1 = nil
+		} else {
+			return nil, fmt.Errorf(`unexpected type %T from directive, should be *int`, tmp)
+		}
+	}
+	args["arg2"] = arg1
+	var arg2 *string
+	if tmp, ok := rawArgs["arg3"]; ok {
+		directive0 := func(ctx context.Context) (interface{}, error) { return ec.unmarshalOString2ᚖstring(ctx, tmp) }
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.ToNull == nil {
+				return nil, errors.New("directive toNull is not implemented")
+			}
+			return ec.directives.ToNull(ctx, rawArgs, directive0)
+		}
+
+		tmp, err = directive1(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if data, ok := tmp.(*string); ok {
+			arg2 = data
+		} else if tmp == nil {
+			arg2 = nil
+		} else {
+			return nil, fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
+		}
+	}
+	args["arg3"] = arg2
 	return args, nil
 }
 
@@ -2802,6 +3156,37 @@ func (ec *executionContext) _B_id(ctx context.Context, field graphql.CollectedFi
 	return ec.marshalNID2string(ctx, field.Selections, res)
 }
 
+func (ec *executionContext) _CheckIssue896_id(ctx context.Context, field graphql.CollectedField, obj *CheckIssue896) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "CheckIssue896",
+		Field:    field,
+		Args:     nil,
+		IsMethod: false,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ID, nil
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*int)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOInt2ᚖint(ctx, field.Selections, res)
+}
+
 func (ec *executionContext) _Circle_radius(ctx context.Context, field graphql.CollectedField, obj *Circle) (ret graphql.Marshaler) {
 	ctx = ec.Tracer.StartFieldExecution(ctx, field)
 	defer func() {
@@ -2924,6 +3309,108 @@ func (ec *executionContext) _Content_User_foo(ctx context.Context, field graphql
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
 	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _EmbeddedCase1_exportedEmbeddedPointerExportedMethod(ctx context.Context, field graphql.CollectedField, obj *EmbeddedCase1) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "EmbeddedCase1",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.ExportedEmbeddedPointerExportedMethod(), nil
+	})
+
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _EmbeddedCase2_unexportedEmbeddedPointerExportedMethod(ctx context.Context, field graphql.CollectedField, obj *EmbeddedCase2) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "EmbeddedCase2",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.UnexportedEmbeddedPointerExportedMethod(), nil
+	})
+
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _EmbeddedCase3_unexportedEmbeddedInterfaceExportedMethod(ctx context.Context, field graphql.CollectedField, obj *EmbeddedCase3) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "EmbeddedCase3",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.UnexportedEmbeddedInterfaceExportedMethod(), nil
+	})
+
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalNString2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _EmbeddedDefaultScalar_value(ctx context.Context, field graphql.CollectedField, obj *EmbeddedDefaultScalar) (ret graphql.Marshaler) {
@@ -4142,7 +4629,7 @@ func (ec *executionContext) _Panics_fieldScalarMarshal(ctx context.Context, fiel
 	res := resTmp.([]MarshalPanic)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx, field.Selections, res)
+	return ec.marshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanicᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Panics_fieldFuncMarshal(ctx context.Context, field graphql.CollectedField, obj *Panics) (ret graphql.Marshaler) {
@@ -4183,7 +4670,7 @@ func (ec *executionContext) _Panics_fieldFuncMarshal(ctx context.Context, field 
 	res := resTmp.([]MarshalPanic)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx, field.Selections, res)
+	return ec.marshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanicᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Panics_argUnmarshal(ctx context.Context, field graphql.CollectedField, obj *Panics) (ret graphql.Marshaler) {
@@ -4602,37 +5089,6 @@ func (ec *executionContext) _Query_nestedOutputs(ctx context.Context, field grap
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
 	return ec.marshalOOuterObject2ᚕᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐOuterObject(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) _Query_shapes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	ctx = ec.Tracer.StartFieldExecution(ctx, field)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-		ec.Tracer.EndFieldExecution(ctx)
-	}()
-	rctx := &graphql.ResolverContext{
-		Object:   "Query",
-		Field:    field,
-		Args:     nil,
-		IsMethod: true,
-	}
-	ctx = graphql.WithResolverContext(ctx, rctx)
-	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
-	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Shapes(rctx)
-	})
-
-	if resTmp == nil {
-		return graphql.Null
-	}
-	res := resTmp.([]Shape)
-	rctx.Result = res
-	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalOShape2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐShape(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_modelMethods(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -5376,6 +5832,212 @@ func (ec *executionContext) _Query_directiveUnimplemented(ctx context.Context, f
 	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
 }
 
+func (ec *executionContext) _Query_embeddedCase1(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().EmbeddedCase1(rctx)
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*EmbeddedCase1)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOEmbeddedCase12ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase1(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_embeddedCase2(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().EmbeddedCase2(rctx)
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*EmbeddedCase2)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOEmbeddedCase22ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase2(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_embeddedCase3(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().EmbeddedCase3(rctx)
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*EmbeddedCase3)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOEmbeddedCase32ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase3(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_shapes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Shapes(rctx)
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.([]Shape)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOShape2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐShape(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_noShape(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		directive0 := func(rctx context.Context) (interface{}, error) {
+			ctx = rctx // use context from middleware stack in children
+			return ec.resolvers.Query().NoShape(rctx)
+		}
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.MakeNil == nil {
+				return nil, errors.New("directive makeNil is not implemented")
+			}
+			return ec.directives.MakeNil(ctx, nil, directive0)
+		}
+
+		tmp, err := directive1(rctx)
+		if err != nil {
+			return nil, err
+		}
+		if tmp == nil {
+			return nil, nil
+		}
+		if data, ok := tmp.(Shape); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf(`unexpected type %T from directive, should be github.com/99designs/gqlgen/codegen/testserver.Shape`, tmp)
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(Shape)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOShape2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐShape(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_issue896a(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Issue896a(rctx)
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.([]*CheckIssue896)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOCheckIssue8962ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896ᚄ(ctx, field.Selections, res)
+}
+
 func (ec *executionContext) _Query_mapStringInterface(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	ctx = ec.Tracer.StartFieldExecution(ctx, field)
 	defer func() {
@@ -5403,6 +6065,44 @@ func (ec *executionContext) _Query_mapStringInterface(ctx context.Context, field
 	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
 		return ec.resolvers.Query().MapStringInterface(rctx, args["in"].(map[string]interface{}))
+	})
+
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(map[string]interface{})
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+	return ec.marshalOMapStringInterfaceType2map(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_mapNestedStringInterface(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Query",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Query_mapNestedStringInterface_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	rctx.Args = args
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().MapNestedStringInterface(rctx, args["in"].(*NestedMapInput))
 	})
 
 	if resTmp == nil {
@@ -5572,7 +6272,7 @@ func (ec *executionContext) _Query_primitiveObject(ctx context.Context, field gr
 	res := resTmp.([]Primitive)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNPrimitive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitive(ctx, field.Selections, res)
+	return ec.marshalNPrimitive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitiveᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_primitiveStringObject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -5606,7 +6306,7 @@ func (ec *executionContext) _Query_primitiveStringObject(ctx context.Context, fi
 	res := resTmp.([]PrimitiveString)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNPrimitiveString2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitiveString(ctx, field.Selections, res)
+	return ec.marshalNPrimitiveString2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitiveStringᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query_defaultScalar(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -6107,7 +6807,7 @@ func (ec *executionContext) _Slices_test2(ctx context.Context, field graphql.Col
 	res := resTmp.([]string)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalOString2ᚕstring(ctx, field.Selections, res)
+	return ec.marshalOString2ᚕstringᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Slices_test3(ctx context.Context, field graphql.CollectedField, obj *Slices) (ret graphql.Marshaler) {
@@ -6175,24 +6875,39 @@ func (ec *executionContext) _Slices_test4(ctx context.Context, field graphql.Col
 	res := resTmp.([]string)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNString2ᚕstring(ctx, field.Selections, res)
+	return ec.marshalNString2ᚕstringᚄ(ctx, field.Selections, res)
 }
 
-func (ec *executionContext) _Subscription_updated(ctx context.Context, field graphql.CollectedField) func() graphql.Marshaler {
-	ctx = graphql.WithResolverContext(ctx, &graphql.ResolverContext{
-		Field: field,
-		Args:  nil,
+func (ec *executionContext) _Subscription_updated(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().Updated(rctx)
 	})
-	// FIXME: subscriptions are missing request middleware stack https://github.com/99designs/gqlgen/issues/259
-	//          and Tracer stack
-	rctx := ctx
-	results, err := ec.resolvers.Subscription().Updated(rctx)
-	if err != nil {
-		ec.Error(ctx, err)
+
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return nil
 	}
 	return func() graphql.Marshaler {
-		res, ok := <-results
+		res, ok := <-resTmp.(<-chan string)
 		if !ok {
 			return nil
 		}
@@ -6206,21 +6921,36 @@ func (ec *executionContext) _Subscription_updated(ctx context.Context, field gra
 	}
 }
 
-func (ec *executionContext) _Subscription_initPayload(ctx context.Context, field graphql.CollectedField) func() graphql.Marshaler {
-	ctx = graphql.WithResolverContext(ctx, &graphql.ResolverContext{
-		Field: field,
-		Args:  nil,
+func (ec *executionContext) _Subscription_initPayload(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().InitPayload(rctx)
 	})
-	// FIXME: subscriptions are missing request middleware stack https://github.com/99designs/gqlgen/issues/259
-	//          and Tracer stack
-	rctx := ctx
-	results, err := ec.resolvers.Subscription().InitPayload(rctx)
-	if err != nil {
-		ec.Error(ctx, err)
+
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
 		return nil
 	}
 	return func() graphql.Marshaler {
-		res, ok := <-results
+		res, ok := <-resTmp.(<-chan string)
 		if !ok {
 			return nil
 		}
@@ -6229,6 +6959,266 @@ func (ec *executionContext) _Subscription_initPayload(ctx context.Context, field
 			graphql.MarshalString(field.Alias).MarshalGQL(w)
 			w.Write([]byte{':'})
 			ec.marshalNString2string(ctx, field.Selections, res).MarshalGQL(w)
+			w.Write([]byte{'}'})
+		})
+	}
+}
+
+func (ec *executionContext) _Subscription_directiveArg(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Subscription_directiveArg_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return nil
+	}
+	rctx.Args = args
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().DirectiveArg(rctx, args["arg"].(string))
+	})
+
+	if resTmp == nil {
+		return nil
+	}
+	return func() graphql.Marshaler {
+		res, ok := <-resTmp.(<-chan *string)
+		if !ok {
+			return nil
+		}
+		return graphql.WriterFunc(func(w io.Writer) {
+			w.Write([]byte{'{'})
+			graphql.MarshalString(field.Alias).MarshalGQL(w)
+			w.Write([]byte{':'})
+			ec.marshalOString2ᚖstring(ctx, field.Selections, res).MarshalGQL(w)
+			w.Write([]byte{'}'})
+		})
+	}
+}
+
+func (ec *executionContext) _Subscription_directiveNullableArg(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Subscription_directiveNullableArg_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return nil
+	}
+	rctx.Args = args
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().DirectiveNullableArg(rctx, args["arg"].(*int), args["arg2"].(*int), args["arg3"].(*string))
+	})
+
+	if resTmp == nil {
+		return nil
+	}
+	return func() graphql.Marshaler {
+		res, ok := <-resTmp.(<-chan *string)
+		if !ok {
+			return nil
+		}
+		return graphql.WriterFunc(func(w io.Writer) {
+			w.Write([]byte{'{'})
+			graphql.MarshalString(field.Alias).MarshalGQL(w)
+			w.Write([]byte{':'})
+			ec.marshalOString2ᚖstring(ctx, field.Selections, res).MarshalGQL(w)
+			w.Write([]byte{'}'})
+		})
+	}
+}
+
+func (ec *executionContext) _Subscription_directiveDouble(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		directive0 := func(rctx context.Context) (interface{}, error) {
+			ctx = rctx // use context from middleware stack in children
+			return ec.resolvers.Subscription().DirectiveDouble(rctx)
+		}
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.Directive1 == nil {
+				return nil, errors.New("directive directive1 is not implemented")
+			}
+			return ec.directives.Directive1(ctx, nil, directive0)
+		}
+		directive2 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.Directive2 == nil {
+				return nil, errors.New("directive directive2 is not implemented")
+			}
+			return ec.directives.Directive2(ctx, nil, directive1)
+		}
+
+		tmp, err := directive2(rctx)
+		if err != nil {
+			return nil, err
+		}
+		if tmp == nil {
+			return nil, nil
+		}
+		if data, ok := tmp.(<-chan *string); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf(`unexpected type %T from directive, should be <-chan *string`, tmp)
+	})
+
+	if resTmp == nil {
+		return nil
+	}
+	return func() graphql.Marshaler {
+		res, ok := <-resTmp.(<-chan *string)
+		if !ok {
+			return nil
+		}
+		return graphql.WriterFunc(func(w io.Writer) {
+			w.Write([]byte{'{'})
+			graphql.MarshalString(field.Alias).MarshalGQL(w)
+			w.Write([]byte{':'})
+			ec.marshalOString2ᚖstring(ctx, field.Selections, res).MarshalGQL(w)
+			w.Write([]byte{'}'})
+		})
+	}
+}
+
+func (ec *executionContext) _Subscription_directiveUnimplemented(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		directive0 := func(rctx context.Context) (interface{}, error) {
+			ctx = rctx // use context from middleware stack in children
+			return ec.resolvers.Subscription().DirectiveUnimplemented(rctx)
+		}
+		directive1 := func(ctx context.Context) (interface{}, error) {
+			if ec.directives.Unimplemented == nil {
+				return nil, errors.New("directive unimplemented is not implemented")
+			}
+			return ec.directives.Unimplemented(ctx, nil, directive0)
+		}
+
+		tmp, err := directive1(rctx)
+		if err != nil {
+			return nil, err
+		}
+		if tmp == nil {
+			return nil, nil
+		}
+		if data, ok := tmp.(<-chan *string); ok {
+			return data, nil
+		}
+		return nil, fmt.Errorf(`unexpected type %T from directive, should be <-chan *string`, tmp)
+	})
+
+	if resTmp == nil {
+		return nil
+	}
+	return func() graphql.Marshaler {
+		res, ok := <-resTmp.(<-chan *string)
+		if !ok {
+			return nil
+		}
+		return graphql.WriterFunc(func(w io.Writer) {
+			w.Write([]byte{'{'})
+			graphql.MarshalString(field.Alias).MarshalGQL(w)
+			w.Write([]byte{':'})
+			ec.marshalOString2ᚖstring(ctx, field.Selections, res).MarshalGQL(w)
+			w.Write([]byte{'}'})
+		})
+	}
+}
+
+func (ec *executionContext) _Subscription_issue896b(ctx context.Context, field graphql.CollectedField) (ret func() graphql.Marshaler) {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+		ec.Tracer.EndFieldExecution(ctx)
+	}()
+	rctx := &graphql.ResolverContext{
+		Object:   "Subscription",
+		Field:    field,
+		Args:     nil,
+		IsMethod: true,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec._fieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().Issue896b(rctx)
+	})
+
+	if resTmp == nil {
+		return nil
+	}
+	return func() graphql.Marshaler {
+		res, ok := <-resTmp.(<-chan []*CheckIssue896)
+		if !ok {
+			return nil
+		}
+		return graphql.WriterFunc(func(w io.Writer) {
+			w.Write([]byte{'{'})
+			graphql.MarshalString(field.Alias).MarshalGQL(w)
+			w.Write([]byte{':'})
+			ec.marshalOCheckIssue8962ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx, field.Selections, res).MarshalGQL(w)
 			w.Write([]byte{'}'})
 		})
 	}
@@ -6299,7 +7289,7 @@ func (ec *executionContext) _User_friends(ctx context.Context, field graphql.Col
 	res := resTmp.([]*User)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐUser(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _User_created(ctx context.Context, field graphql.CollectedField, obj *User) (ret graphql.Marshaler) {
@@ -6715,7 +7705,7 @@ func (ec *executionContext) ___Directive_locations(ctx context.Context, field gr
 	res := resTmp.([]string)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalN__DirectiveLocation2ᚕstring(ctx, field.Selections, res)
+	return ec.marshalN__DirectiveLocation2ᚕstringᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Directive_args(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
@@ -6749,7 +7739,7 @@ func (ec *executionContext) ___Directive_args(ctx context.Context, field graphql
 	res := resTmp.([]introspection.InputValue)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalN__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValue(ctx, field.Selections, res)
+	return ec.marshalN__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValueᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___EnumValue_name(ctx context.Context, field graphql.CollectedField, obj *introspection.EnumValue) (ret graphql.Marshaler) {
@@ -6978,7 +7968,7 @@ func (ec *executionContext) ___Field_args(ctx context.Context, field graphql.Col
 	res := resTmp.([]introspection.InputValue)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalN__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValue(ctx, field.Selections, res)
+	return ec.marshalN__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValueᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Field_type(ctx context.Context, field graphql.CollectedField, obj *introspection.Field) (ret graphql.Marshaler) {
@@ -7241,7 +8231,7 @@ func (ec *executionContext) ___Schema_types(ctx context.Context, field graphql.C
 	res := resTmp.([]introspection.Type)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalN__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐType(ctx, field.Selections, res)
+	return ec.marshalN__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐTypeᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Schema_queryType(ctx context.Context, field graphql.CollectedField, obj *introspection.Schema) (ret graphql.Marshaler) {
@@ -7371,7 +8361,7 @@ func (ec *executionContext) ___Schema_directives(ctx context.Context, field grap
 	res := resTmp.([]introspection.Directive)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalN__Directive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx, field.Selections, res)
+	return ec.marshalN__Directive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirectiveᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Type_kind(ctx context.Context, field graphql.CollectedField, obj *introspection.Type) (ret graphql.Marshaler) {
@@ -7505,7 +8495,7 @@ func (ec *executionContext) ___Type_fields(ctx context.Context, field graphql.Co
 	res := resTmp.([]introspection.Field)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalO__Field2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐField(ctx, field.Selections, res)
+	return ec.marshalO__Field2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐFieldᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Type_interfaces(ctx context.Context, field graphql.CollectedField, obj *introspection.Type) (ret graphql.Marshaler) {
@@ -7536,7 +8526,7 @@ func (ec *executionContext) ___Type_interfaces(ctx context.Context, field graphq
 	res := resTmp.([]introspection.Type)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalO__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐType(ctx, field.Selections, res)
+	return ec.marshalO__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐTypeᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Type_possibleTypes(ctx context.Context, field graphql.CollectedField, obj *introspection.Type) (ret graphql.Marshaler) {
@@ -7567,7 +8557,7 @@ func (ec *executionContext) ___Type_possibleTypes(ctx context.Context, field gra
 	res := resTmp.([]introspection.Type)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalO__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐType(ctx, field.Selections, res)
+	return ec.marshalO__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐTypeᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Type_enumValues(ctx context.Context, field graphql.CollectedField, obj *introspection.Type) (ret graphql.Marshaler) {
@@ -7605,7 +8595,7 @@ func (ec *executionContext) ___Type_enumValues(ctx context.Context, field graphq
 	res := resTmp.([]introspection.EnumValue)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValue(ctx, field.Selections, res)
+	return ec.marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Type_inputFields(ctx context.Context, field graphql.CollectedField, obj *introspection.Type) (ret graphql.Marshaler) {
@@ -7636,7 +8626,7 @@ func (ec *executionContext) ___Type_inputFields(ctx context.Context, field graph
 	res := resTmp.([]introspection.InputValue)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
-	return ec.marshalO__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValue(ctx, field.Selections, res)
+	return ec.marshalO__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValueᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) ___Type_ofType(ctx context.Context, field graphql.CollectedField, obj *introspection.Type) (ret graphql.Marshaler) {
@@ -7906,6 +8896,24 @@ func (ec *executionContext) unmarshalInputInputDirectives(ctx context.Context, o
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputNestedMapInput(ctx context.Context, obj interface{}) (NestedMapInput, error) {
+	var it NestedMapInput
+	var asMap = obj.(map[string]interface{})
+
+	for k, v := range asMap {
+		switch k {
+		case "map":
+			var err error
+			it.Map, err = ec.unmarshalOMapStringInterfaceInput2map(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputOuterInput(ctx context.Context, obj interface{}) (OuterInput, error) {
 	var it OuterInput
 	var asMap = obj.(map[string]interface{})
@@ -7932,7 +8940,7 @@ func (ec *executionContext) unmarshalInputRecursiveInputSlice(ctx context.Contex
 		switch k {
 		case "self":
 			var err error
-			it.Self, err = ec.unmarshalORecursiveInputSlice2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐRecursiveInputSlice(ctx, v)
+			it.Self, err = ec.unmarshalORecursiveInputSlice2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐRecursiveInputSliceᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -8114,8 +9122,8 @@ func (ec *executionContext) unmarshalInputValidInput(ctx context.Context, obj in
 
 // region    ************************** interface.gotpl ***************************
 
-func (ec *executionContext) _Content_Child(ctx context.Context, sel ast.SelectionSet, obj *ContentChild) graphql.Marshaler {
-	switch obj := (*obj).(type) {
+func (ec *executionContext) _Content_Child(ctx context.Context, sel ast.SelectionSet, obj ContentChild) graphql.Marshaler {
+	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
 	case ContentUser:
@@ -8131,8 +9139,8 @@ func (ec *executionContext) _Content_Child(ctx context.Context, sel ast.Selectio
 	}
 }
 
-func (ec *executionContext) _Shape(ctx context.Context, sel ast.SelectionSet, obj *Shape) graphql.Marshaler {
-	switch obj := (*obj).(type) {
+func (ec *executionContext) _Shape(ctx context.Context, sel ast.SelectionSet, obj Shape) graphql.Marshaler {
+	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
 	case *Circle:
@@ -8144,8 +9152,8 @@ func (ec *executionContext) _Shape(ctx context.Context, sel ast.SelectionSet, ob
 	}
 }
 
-func (ec *executionContext) _ShapeUnion(ctx context.Context, sel ast.SelectionSet, obj *ShapeUnion) graphql.Marshaler {
-	switch obj := (*obj).(type) {
+func (ec *executionContext) _ShapeUnion(ctx context.Context, sel ast.SelectionSet, obj ShapeUnion) graphql.Marshaler {
+	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
 	case *Circle:
@@ -8157,8 +9165,8 @@ func (ec *executionContext) _ShapeUnion(ctx context.Context, sel ast.SelectionSe
 	}
 }
 
-func (ec *executionContext) _TestUnion(ctx context.Context, sel ast.SelectionSet, obj *TestUnion) graphql.Marshaler {
-	switch obj := (*obj).(type) {
+func (ec *executionContext) _TestUnion(ctx context.Context, sel ast.SelectionSet, obj TestUnion) graphql.Marshaler {
+	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
 	case A:
@@ -8333,6 +9341,30 @@ func (ec *executionContext) _B(ctx context.Context, sel ast.SelectionSet, obj *B
 	return out
 }
 
+var checkIssue896Implementors = []string{"CheckIssue896"}
+
+func (ec *executionContext) _CheckIssue896(ctx context.Context, sel ast.SelectionSet, obj *CheckIssue896) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.RequestContext, sel, checkIssue896Implementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CheckIssue896")
+		case "id":
+			out.Values[i] = ec._CheckIssue896_id(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
 var circleImplementors = []string{"Circle", "Shape", "ShapeUnion"}
 
 func (ec *executionContext) _Circle(ctx context.Context, sel ast.SelectionSet, obj *Circle) graphql.Marshaler {
@@ -8396,6 +9428,87 @@ func (ec *executionContext) _Content_User(ctx context.Context, sel ast.Selection
 			out.Values[i] = graphql.MarshalString("Content_User")
 		case "foo":
 			out.Values[i] = ec._Content_User_foo(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var embeddedCase1Implementors = []string{"EmbeddedCase1"}
+
+func (ec *executionContext) _EmbeddedCase1(ctx context.Context, sel ast.SelectionSet, obj *EmbeddedCase1) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.RequestContext, sel, embeddedCase1Implementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EmbeddedCase1")
+		case "exportedEmbeddedPointerExportedMethod":
+			out.Values[i] = ec._EmbeddedCase1_exportedEmbeddedPointerExportedMethod(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var embeddedCase2Implementors = []string{"EmbeddedCase2"}
+
+func (ec *executionContext) _EmbeddedCase2(ctx context.Context, sel ast.SelectionSet, obj *EmbeddedCase2) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.RequestContext, sel, embeddedCase2Implementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EmbeddedCase2")
+		case "unexportedEmbeddedPointerExportedMethod":
+			out.Values[i] = ec._EmbeddedCase2_unexportedEmbeddedPointerExportedMethod(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
+var embeddedCase3Implementors = []string{"EmbeddedCase3"}
+
+func (ec *executionContext) _EmbeddedCase3(ctx context.Context, sel ast.SelectionSet, obj *EmbeddedCase3) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.RequestContext, sel, embeddedCase3Implementors)
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EmbeddedCase3")
+		case "unexportedEmbeddedInterfaceExportedMethod":
+			out.Values[i] = ec._EmbeddedCase3_unexportedEmbeddedInterfaceExportedMethod(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -9241,17 +10354,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				res = ec._Query_nestedOutputs(ctx, field)
 				return res
 			})
-		case "shapes":
-			field := field
-			out.Concurrently(i, func() (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_shapes(ctx, field)
-				return res
-			})
 		case "modelMethods":
 			field := field
 			out.Concurrently(i, func() (res graphql.Marshaler) {
@@ -9476,6 +10578,72 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				res = ec._Query_directiveUnimplemented(ctx, field)
 				return res
 			})
+		case "embeddedCase1":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_embeddedCase1(ctx, field)
+				return res
+			})
+		case "embeddedCase2":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_embeddedCase2(ctx, field)
+				return res
+			})
+		case "embeddedCase3":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_embeddedCase3(ctx, field)
+				return res
+			})
+		case "shapes":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_shapes(ctx, field)
+				return res
+			})
+		case "noShape":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_noShape(ctx, field)
+				return res
+			})
+		case "issue896a":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_issue896a(ctx, field)
+				return res
+			})
 		case "mapStringInterface":
 			field := field
 			out.Concurrently(i, func() (res graphql.Marshaler) {
@@ -9485,6 +10653,17 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_mapStringInterface(ctx, field)
+				return res
+			})
+		case "mapNestedStringInterface":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_mapNestedStringInterface(ctx, field)
 				return res
 			})
 		case "errorBubble":
@@ -9761,6 +10940,16 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_updated(ctx, fields[0])
 	case "initPayload":
 		return ec._Subscription_initPayload(ctx, fields[0])
+	case "directiveArg":
+		return ec._Subscription_directiveArg(ctx, fields[0])
+	case "directiveNullableArg":
+		return ec._Subscription_directiveNullableArg(ctx, fields[0])
+	case "directiveDouble":
+		return ec._Subscription_directiveDouble(ctx, fields[0])
+	case "directiveUnimplemented":
+		return ec._Subscription_directiveUnimplemented(ctx, fields[0])
+	case "issue896b":
+		return ec._Subscription_issue896b(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -10264,6 +11453,20 @@ func (ec *executionContext) marshalNBytes2ᚕbyte(ctx context.Context, sel ast.S
 	return res
 }
 
+func (ec *executionContext) marshalNCheckIssue8962githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx context.Context, sel ast.SelectionSet, v CheckIssue896) graphql.Marshaler {
+	return ec._CheckIssue896(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCheckIssue8962ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx context.Context, sel ast.SelectionSet, v *CheckIssue896) graphql.Marshaler {
+	if v == nil {
+		if !ec.HasError(graphql.GetResolverContext(ctx)) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	return ec._CheckIssue896(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNDefaultScalarImplementation2string(ctx context.Context, v interface{}) (string, error) {
 	return graphql.UnmarshalString(v)
 }
@@ -10456,7 +11659,7 @@ func (ec *executionContext) marshalNMarshalPanic2githubᚗcomᚋ99designsᚋgqlg
 	return v
 }
 
-func (ec *executionContext) unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx context.Context, v interface{}) ([]MarshalPanic, error) {
+func (ec *executionContext) unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanicᚄ(ctx context.Context, v interface{}) ([]MarshalPanic, error) {
 	var vSlice []interface{}
 	if v != nil {
 		if tmp1, ok := v.([]interface{}); ok {
@@ -10476,7 +11679,7 @@ func (ec *executionContext) unmarshalNMarshalPanic2ᚕgithubᚗcomᚋ99designs�
 	return res, nil
 }
 
-func (ec *executionContext) marshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx context.Context, sel ast.SelectionSet, v []MarshalPanic) graphql.Marshaler {
+func (ec *executionContext) marshalNMarshalPanic2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanicᚄ(ctx context.Context, sel ast.SelectionSet, v []MarshalPanic) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	for i := range v {
 		ret[i] = ec.marshalNMarshalPanic2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐMarshalPanic(ctx, sel, v[i])
@@ -10489,7 +11692,7 @@ func (ec *executionContext) marshalNPrimitive2githubᚗcomᚋ99designsᚋgqlgen�
 	return ec._Primitive(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNPrimitive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitive(ctx context.Context, sel ast.SelectionSet, v []Primitive) graphql.Marshaler {
+func (ec *executionContext) marshalNPrimitive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitiveᚄ(ctx context.Context, sel ast.SelectionSet, v []Primitive) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10530,7 +11733,7 @@ func (ec *executionContext) marshalNPrimitiveString2githubᚗcomᚋ99designsᚋg
 	return ec._PrimitiveString(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNPrimitiveString2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitiveString(ctx context.Context, sel ast.SelectionSet, v []PrimitiveString) graphql.Marshaler {
+func (ec *executionContext) marshalNPrimitiveString2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐPrimitiveStringᚄ(ctx context.Context, sel ast.SelectionSet, v []PrimitiveString) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10572,7 +11775,13 @@ func (ec *executionContext) unmarshalNRecursiveInputSlice2githubᚗcomᚋ99desig
 }
 
 func (ec *executionContext) marshalNShapeUnion2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐShapeUnion(ctx context.Context, sel ast.SelectionSet, v ShapeUnion) graphql.Marshaler {
-	return ec._ShapeUnion(ctx, sel, &v)
+	if v == nil {
+		if !ec.HasError(graphql.GetResolverContext(ctx)) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	return ec._ShapeUnion(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v interface{}) (string, error) {
@@ -10589,7 +11798,7 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 	return res
 }
 
-func (ec *executionContext) unmarshalNString2ᚕstring(ctx context.Context, v interface{}) ([]string, error) {
+func (ec *executionContext) unmarshalNString2ᚕstringᚄ(ctx context.Context, v interface{}) ([]string, error) {
 	var vSlice []interface{}
 	if v != nil {
 		if tmp1, ok := v.([]interface{}); ok {
@@ -10609,7 +11818,7 @@ func (ec *executionContext) unmarshalNString2ᚕstring(ctx context.Context, v in
 	return res, nil
 }
 
-func (ec *executionContext) marshalNString2ᚕstring(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	for i := range v {
 		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
@@ -10697,7 +11906,7 @@ func (ec *executionContext) marshalNUser2githubᚗcomᚋ99designsᚋgqlgenᚋcod
 	return ec._User(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐUser(ctx context.Context, sel ast.SelectionSet, v []*User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*User) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10777,7 +11986,7 @@ func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlge
 	return ec.___Directive(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalN__Directive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v []introspection.Directive) graphql.Marshaler {
+func (ec *executionContext) marshalN__Directive2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirectiveᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.Directive) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10828,7 +12037,7 @@ func (ec *executionContext) marshalN__DirectiveLocation2string(ctx context.Conte
 	return res
 }
 
-func (ec *executionContext) unmarshalN__DirectiveLocation2ᚕstring(ctx context.Context, v interface{}) ([]string, error) {
+func (ec *executionContext) unmarshalN__DirectiveLocation2ᚕstringᚄ(ctx context.Context, v interface{}) ([]string, error) {
 	var vSlice []interface{}
 	if v != nil {
 		if tmp1, ok := v.([]interface{}); ok {
@@ -10848,7 +12057,7 @@ func (ec *executionContext) unmarshalN__DirectiveLocation2ᚕstring(ctx context.
 	return res, nil
 }
 
-func (ec *executionContext) marshalN__DirectiveLocation2ᚕstring(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+func (ec *executionContext) marshalN__DirectiveLocation2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10897,7 +12106,7 @@ func (ec *executionContext) marshalN__InputValue2githubᚗcomᚋ99designsᚋgqlg
 	return ec.___InputValue(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalN__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValue(ctx context.Context, sel ast.SelectionSet, v []introspection.InputValue) graphql.Marshaler {
+func (ec *executionContext) marshalN__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.InputValue) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10938,7 +12147,7 @@ func (ec *executionContext) marshalN__Type2githubᚗcomᚋ99designsᚋgqlgenᚋg
 	return ec.___Type(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalN__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐType(ctx context.Context, sel ast.SelectionSet, v []introspection.Type) graphql.Marshaler {
+func (ec *executionContext) marshalN__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐTypeᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.Type) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -11040,6 +12249,97 @@ func (ec *executionContext) unmarshalOChanges2map(ctx context.Context, v interfa
 	return v.(map[string]interface{}), nil
 }
 
+func (ec *executionContext) marshalOCheckIssue8962githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx context.Context, sel ast.SelectionSet, v CheckIssue896) graphql.Marshaler {
+	return ec._CheckIssue896(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalOCheckIssue8962ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx context.Context, sel ast.SelectionSet, v []*CheckIssue896) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		rctx := &graphql.ResolverContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithResolverContext(ctx, rctx)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalOCheckIssue8962ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+	return ret
+}
+
+func (ec *executionContext) marshalOCheckIssue8962ᚕᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896ᚄ(ctx context.Context, sel ast.SelectionSet, v []*CheckIssue896) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		rctx := &graphql.ResolverContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithResolverContext(ctx, rctx)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNCheckIssue8962ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+	return ret
+}
+
+func (ec *executionContext) marshalOCheckIssue8962ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCheckIssue896(ctx context.Context, sel ast.SelectionSet, v *CheckIssue896) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._CheckIssue896(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalOCircle2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐCircle(ctx context.Context, sel ast.SelectionSet, v Circle) graphql.Marshaler {
 	return ec._Circle(ctx, sel, &v)
 }
@@ -11072,6 +12372,39 @@ func (ec *executionContext) marshalODefaultScalarImplementation2ᚖstring(ctx co
 		return graphql.Null
 	}
 	return ec.marshalODefaultScalarImplementation2string(ctx, sel, *v)
+}
+
+func (ec *executionContext) marshalOEmbeddedCase12githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase1(ctx context.Context, sel ast.SelectionSet, v EmbeddedCase1) graphql.Marshaler {
+	return ec._EmbeddedCase1(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalOEmbeddedCase12ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase1(ctx context.Context, sel ast.SelectionSet, v *EmbeddedCase1) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._EmbeddedCase1(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOEmbeddedCase22githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase2(ctx context.Context, sel ast.SelectionSet, v EmbeddedCase2) graphql.Marshaler {
+	return ec._EmbeddedCase2(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalOEmbeddedCase22ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase2(ctx context.Context, sel ast.SelectionSet, v *EmbeddedCase2) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._EmbeddedCase2(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOEmbeddedCase32githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase3(ctx context.Context, sel ast.SelectionSet, v EmbeddedCase3) graphql.Marshaler {
+	return ec._EmbeddedCase3(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalOEmbeddedCase32ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐEmbeddedCase3(ctx context.Context, sel ast.SelectionSet, v *EmbeddedCase3) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._EmbeddedCase3(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOError2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐError(ctx context.Context, sel ast.SelectionSet, v Error) graphql.Marshaler {
@@ -11196,6 +12529,18 @@ func (ec *executionContext) marshalOModelMethods2ᚖgithubᚗcomᚋ99designsᚋg
 		return graphql.Null
 	}
 	return ec._ModelMethods(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalONestedMapInput2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐNestedMapInput(ctx context.Context, v interface{}) (NestedMapInput, error) {
+	return ec.unmarshalInputNestedMapInput(ctx, v)
+}
+
+func (ec *executionContext) unmarshalONestedMapInput2ᚖgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐNestedMapInput(ctx context.Context, v interface{}) (*NestedMapInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalONestedMapInput2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐNestedMapInput(ctx, v)
+	return &res, err
 }
 
 func (ec *executionContext) marshalOObjectDirectives2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐObjectDirectives(ctx context.Context, sel ast.SelectionSet, v ObjectDirectives) graphql.Marshaler {
@@ -11389,7 +12734,7 @@ func (ec *executionContext) unmarshalORecursiveInputSlice2githubᚗcomᚋ99desig
 	return ec.unmarshalInputRecursiveInputSlice(ctx, v)
 }
 
-func (ec *executionContext) unmarshalORecursiveInputSlice2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐRecursiveInputSlice(ctx context.Context, v interface{}) ([]RecursiveInputSlice, error) {
+func (ec *executionContext) unmarshalORecursiveInputSlice2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐRecursiveInputSliceᚄ(ctx context.Context, v interface{}) ([]RecursiveInputSlice, error) {
 	var vSlice []interface{}
 	if v != nil {
 		if tmp1, ok := v.([]interface{}); ok {
@@ -11418,7 +12763,10 @@ func (ec *executionContext) unmarshalORecursiveInputSlice2ᚖgithubᚗcomᚋ99de
 }
 
 func (ec *executionContext) marshalOShape2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐShape(ctx context.Context, sel ast.SelectionSet, v Shape) graphql.Marshaler {
-	return ec._Shape(ctx, sel, &v)
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Shape(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOShape2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐShape(ctx context.Context, sel ast.SelectionSet, v []Shape) graphql.Marshaler {
@@ -11480,7 +12828,7 @@ func (ec *executionContext) marshalOString2string(ctx context.Context, sel ast.S
 	return graphql.MarshalString(v)
 }
 
-func (ec *executionContext) unmarshalOString2ᚕstring(ctx context.Context, v interface{}) ([]string, error) {
+func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v interface{}) ([]string, error) {
 	var vSlice []interface{}
 	if v != nil {
 		if tmp1, ok := v.([]interface{}); ok {
@@ -11500,7 +12848,7 @@ func (ec *executionContext) unmarshalOString2ᚕstring(ctx context.Context, v in
 	return res, nil
 }
 
-func (ec *executionContext) marshalOString2ᚕstring(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+func (ec *executionContext) marshalOString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -11560,7 +12908,10 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 }
 
 func (ec *executionContext) marshalOTestUnion2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐTestUnion(ctx context.Context, sel ast.SelectionSet, v TestUnion) graphql.Marshaler {
-	return ec._TestUnion(ctx, sel, &v)
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TestUnion(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOThirdParty2githubᚗcomᚋ99designsᚋgqlgenᚋcodegenᚋtestserverᚐThirdParty(ctx context.Context, v interface{}) (ThirdParty, error) {
@@ -11632,7 +12983,7 @@ func (ec *executionContext) marshalOValidType2ᚖgithubᚗcomᚋ99designsᚋgqlg
 	return ec._ValidType(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValue(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {
+func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -11672,7 +13023,7 @@ func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgq
 	return ret
 }
 
-func (ec *executionContext) marshalO__Field2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐField(ctx context.Context, sel ast.SelectionSet, v []introspection.Field) graphql.Marshaler {
+func (ec *executionContext) marshalO__Field2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐFieldᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.Field) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -11712,7 +13063,7 @@ func (ec *executionContext) marshalO__Field2ᚕgithubᚗcomᚋ99designsᚋgqlgen
 	return ret
 }
 
-func (ec *executionContext) marshalO__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValue(ctx context.Context, sel ast.SelectionSet, v []introspection.InputValue) graphql.Marshaler {
+func (ec *executionContext) marshalO__InputValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐInputValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.InputValue) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -11767,7 +13118,7 @@ func (ec *executionContext) marshalO__Type2githubᚗcomᚋ99designsᚋgqlgenᚋg
 	return ec.___Type(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalO__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐType(ctx context.Context, sel ast.SelectionSet, v []introspection.Type) graphql.Marshaler {
+func (ec *executionContext) marshalO__Type2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐTypeᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.Type) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

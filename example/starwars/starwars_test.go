@@ -1,7 +1,6 @@
 package starwars
 
 import (
-	"net/http/httptest"
 	"testing"
 
 	"github.com/99designs/gqlgen/client"
@@ -12,8 +11,7 @@ import (
 )
 
 func TestStarwars(t *testing.T) {
-	srv := httptest.NewServer(handler.GraphQL(generated.NewExecutableSchema(NewResolver())))
-	c := client.New(srv.URL)
+	c := client.New(handler.GraphQL(generated.NewExecutableSchema(NewResolver())))
 
 	t.Run("Lukes starships", func(t *testing.T) {
 		var resp struct {
@@ -216,7 +214,7 @@ func TestStarwars(t *testing.T) {
 		  }
 		}`, &resp, client.Var("episode", "INVALID"))
 
-		require.EqualError(t, err, `[{"message":"INVALID is not a valid Episode","path":["createReview"]}]`)
+		require.EqualError(t, err, `http 422: {"errors":[{"message":"INVALID is not a valid Episode","path":["variable","episode"]}],"data":null}`)
 	})
 
 	t.Run("introspection", func(t *testing.T) {
